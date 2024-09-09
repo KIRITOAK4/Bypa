@@ -15,16 +15,25 @@ app = Client("gplinks_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKE
 def gplinks_bypass(url: str):
     client = cloudscraper.create_scraper(allow_brotli=False)
     domain = "https://gplinks.co/"
-    referer = "https://mynewsmedia.co/"
-
-    # Initial request to get the 'vid' parameter
-    response = client.get(url, allow_redirects=False)
-    vid = response.headers.get("Location", "").split("=")[-1]
-    if not vid:
-        return "Could not retrieve the vid from URL."
+    
+    # Make initial request to resolve the actual URL and retrieve the 'vid'
+    response = client.get(url, allow_redirects=True)
+    
+    # Check if response has 'Location' header (for redirection)
+    if 'Location' in response.headers:
+        location_url = response.headers['Location']
+        vid = location_url.split("=")[-1]
+    else:
+        # Try to parse 'vid' from the page content
+        soup = BeautifulSoup(response.content, "html.parser")
+        vid_element = soup.find('input', {'name': 'vid'})
+        if vid_element and vid_element.has_attr('value'):
+            vid = vid_element['value']
+        else:
+            return "Could not retrieve the vid from URL."
 
     # Construct the URL with the 'vid' parameter
-    url = f"{url}/?{vid}"
+    url = f"{domain}?{vid}"
 
     # Second request to get the page with the form
     response = client.get(url, allow_redirects=False)
