@@ -11,54 +11,26 @@ BOT_TOKEN = "6202042878:AAFof9nGLi597vpEISpamG4b-d3Qsgp38Oc"
 # Initialize Pyrogram Client
 app = Client("gplinks_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# Function to bypass gplinks URL
-def gplinks_bypass(url: str):
+def gplinks(url: str):
     client = cloudscraper.create_scraper(allow_brotli=False)
+    token = url.split("/")[-1]
     domain = "https://gplinks.co/"
-    
-    # Make initial request to resolve the actual URL and retrieve the 'vid'
-    response = client.get(url, allow_redirects=True)
-    
-    # Check if response has 'Location' header (for redirection)
-    if 'Location' in response.headers:
-        location_url = response.headers['Location']
-        vid = location_url.split("=")[-1]
-    else:
-        # Try to parse 'vid' from the page content
-        soup = BeautifulSoup(response.content, "html.parser")
-        vid_element = soup.find('input', {'name': 'vid'})
-        if vid_element and vid_element.has_attr('value'):
-            vid = vid_element['value']
-        else:
-            return "Could not retrieve the vid from URL."
-
-    # Construct the URL with the 'vid' parameter
-    url = f"{domain}?{vid}"
-
-    # Second request to get the page with the form
+    referer = "https://mynewsmedia.co/"
+    vid = client.get(url, allow_redirects=False).headers["Location"].split("=")[-1]
+    url = f"{url}/?{vid}"
     response = client.get(url, allow_redirects=False)
     soup = BeautifulSoup(response.content, "html.parser")
-
-    # Extract input data from the form
-    form = soup.find(id="go-link")
-    if not form:
-        return "Form with ID 'go-link' not found."
-    
-    inputs = form.find_all(name="input")
-    data = {input.get('name'): input.get('value') for input in inputs}
-
-    # Wait for a few seconds before making the next request
+    inputs = soup.find(id="go-link").find_all(name="input")
+    data = {input.get("name"): input.get("value") for input in inputs}
     time.sleep(10)
-    
-    # Headers required for bypassing the protection
     headers = {"x-requested-with": "XMLHttpRequest"}
-    response = client.post(domain + "links/go", data=data, headers=headers)
-
-    # Check if the response contains the 'url' key
-    if response.status_code == 200 and "url" in response.json():
-        return response.json()["url"]
-    else:
-        return "Bypass failed, could not retrieve the final URL."
+    bypassed_url = client.post(domain + "links/go", data=data, headers=headers).json()[
+        "url"
+    ]
+    try:
+        return bypassed_url
+    except:
+        return "Something went wrong :("
 
 # Handler function for incoming messages
 @app.on_message(filters.text & filters.private)
@@ -67,7 +39,7 @@ def handle_message(client, message):
     if "gplinks.co" in text:
         message.reply_text("Processing your request, please wait...")  # Inform the user that the process has started
         try:
-            final_url = gplinks_bypass(text)  # Call the bypass function
+            final_url = gplinks(text)  # Call the bypass function
             message.reply_text(f"Final URL: {final_url}")
         except Exception as e:
             message.reply_text(f"An error occurred: {str(e)}")
