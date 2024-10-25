@@ -1,5 +1,5 @@
 aiohttp
-pyrogram
+pip install https://github.com/KurimuzonAkuma/pyrogram/archive/v2.1.30.zip
 tgcrypto
 requests
 cloudscraper==1.2.58
