@@ -1,6 +1,8 @@
 import os
 import asyncio
 import logging
+import time
+import cloudscraper
 from pyrogram import Client, filters
 import aiohttp
 from bs4 import BeautifulSoup
@@ -21,35 +23,23 @@ logger.info(f"Bot initialized with API_ID: {API_ID}")
 async def start_command(client, message):
     await message.reply_text("Welcome! Send me a gplinks.co URL, and I'll bypass it for you.")
 
-async def bypass_gplinks(url):
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            soup = BeautifulSoup(await response.text(), 'html.parser')
-            
-            # Find the button with id 'link-btn'
-            link_btn = soup.find('a', id='link-btn')
-            
-            if link_btn:
-                # Extract the 'href' attribute
-                bypassed_url = link_btn.get('href')
-                return bypassed_url
-            else:
-                return None
-
-@app.on_message(filters.text & filters.regex(r'https?://gplinks\.co/\w+'))
-async def handle_gplinks_url(client, message):
-    url = message.text.strip()
-    bypassed_url = await bypass_gplinks(url)
-    
-    if bypassed_url:
-        await message.reply_text(f"Bypassed URL: {bypassed_url}")
-    else:
-        await message.reply_text("Sorry, I couldn't bypass this URL.")
-
-async def main():
-    await app.start()
-    logger.info("Bot is running...")
-    await asyncio.Event().wait()  # This will run forever
-
-if __name__ == "__main__":
-    asyncio.run(main())
+def gplinks(url: str):
+    client = cloudscraper.create_scraper(allow_brotli=False)
+    token = url.split("/")[-1]
+    domain = "https://gplinks.co/"
+    referer = "https://safaroflife.com/"
+    vid = client.get(url, allow_redirects=False).headers["Location"].split("=")[-1]
+    url = f"{url}/?{vid}"
+    response = client.get(url, allow_redirects=False)
+    soup = BeautifulSoup(response.content, "html.parser")
+    inputs = soup.find(id="go-link").find_all(name="input")
+    data = {input.get("name"): input.get("value") for input in inputs}
+    time.sleep(10)
+    headers = {"x-requested-with": "XMLHttpRequest"}
+    bypassed_url = client.post(domain + "links/go", data=data, headers=headers).json()[
+        "url"
+    ]
+    try:
+        return bypassed_url
+    except:
+        return "Something went wrong :("
