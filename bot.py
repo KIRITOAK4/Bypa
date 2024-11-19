@@ -68,6 +68,7 @@ async def gplinks(url: str):
     """
     try:
         client = cloudscraper.create_scraper(allow_brotli=False)
+        token = url.split('/')[-1]
         domain = 'https://gplinks.co/'
         referer = 'https://safaroflife.com/'  # Example referer (adjust as needed)
 
