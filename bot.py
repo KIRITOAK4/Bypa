@@ -17,9 +17,9 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-API_ID = int(os.getenv('API_ID'))
-API_HASH = os.getenv('API_HASH')
-BOT_TOKEN = os.getenv('BOT_TOKEN')
+API_ID = int(os.environ.get("API_ID", 14712540))
+API_HASH = os.environ.get("API_HASH", "e61b996dc037d969a4f8cf6411bb6165")
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "6280721521:AAGvEXRn-4tZD28vooWBiDZJuBxSErn4Xx0")
 
 app = Client('gplinks_bypass_bot', api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
