@@ -1,4 +1,3 @@
-
 import os
 import asyncio
 import logging
@@ -57,7 +56,7 @@ async def help_command(client, message):
 
 async def fetch_url(url, headers=None):
     async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=headers, allow_redirects=False) as response:
+        async with session.get(url, headers=headers) as response:
             return await response.text(), response.headers
 
 async def gplinks(url: str):
@@ -68,18 +67,11 @@ async def gplinks(url: str):
     """
     try:
         client = cloudscraper.create_scraper(allow_brotli=False)
-        token = url.split('/')[-1]
-        domain = 'https://gplinks.co/'
-        referer = 'https://safaroflife.com/'  # Example referer (adjust as needed)
-
-        # Initial fetch to get token or vid
-        resp, headers = await fetch_url(url)
-        vid = headers.get('Location', '').split('=')[-1] if 'Location' in headers else None
-        url = f"{url}/?{vid}" if vid else url
-
-        # Second fetch to parse the form data
-        resp, _ = await fetch_url(url)
-        soup = BeautifulSoup(resp, 'html.parser')
+        resp = client.get(url, allow_redirects=False)
+        if resp.status_code in [301, 302]:  # If redirected, use the location header
+            url = resp.headers.get("Location")
+        
+        soup = BeautifulSoup(resp.text, 'html.parser')
         inputs = soup.find(id='go-link').find_all(name='input')
         data = {input_tag.get('name'): input_tag.get('value') for input_tag in inputs}
 
@@ -89,10 +81,10 @@ async def gplinks(url: str):
         # Send POST request to bypass URL
         headers = {'x-requested-with': 'XMLHttpRequest'}
         async with aiohttp.ClientSession() as session:
-            async with session.post(f"{domain}links/go", data=data, headers=headers) as response:
-                bypassed_url = (await response.json()).get('url')
-
-        return bypassed_url if bypassed_url else "Failed to bypass URL."
+            async with session.post(f"https://gplinks.co/links/go", data=data, headers=headers) as response:
+                json_response = await response.json()
+                bypassed_url = json_response.get('url')
+                return bypassed_url if bypassed_url else "Failed to bypass URL."
     except Exception as e:
         logger.error(f"Error in gplinks function: {str(e)}")
         return "An error occurred while bypassing the link."
@@ -111,10 +103,11 @@ async def handle_gplinks_url(client, message):
 
     try:
         bypassed_url = await gplinks(url)
-        await message.reply_text(f"Here's your bypassed URL: {bypassed_url}")
+        await message.reply_text(f"Here\'s your bypassed URL: {bypassed_url}")
     except Exception as e:
         logger.error(f"Error processing URL: {str(e)}")
         await message.reply_text('An error occurred while processing your request. Please try again later.')
 
 if __name__ == '__main__':
     app.run()
+
