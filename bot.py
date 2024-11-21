@@ -56,13 +56,10 @@ async def gplinks(url: str):
         vid = response.headers["Location"].split("=")[-1]
     else:
         return "Failed to retrieve the video ID."
-
-    data = {
-        "token": token,
-        "vid": vid
-    }   
+    url = f"{url}/?{pid}&{vid}"
     # Sleep for a while to mimic human behavior
-    time.sleep(10)
+    time.sleep(20)
+    # Create a method to bypass cloudflare and after waiting for 5 sec get a Get link button 
     h = {"X-Requested-With": "XMLHttpRequest"}
     r = client.post(f"{domain}/links/go", data=data, headers=h)
     try:
