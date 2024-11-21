@@ -3,13 +3,13 @@ import asyncio
 import logging
 from dotenv import load_dotenv
 import cloudscraper
+import time
 from pyrogram import Client, filters
 import aiohttp
 from bs4 import BeautifulSoup
-from collections import defaultdict
 from datetime import datetime, timedelta
 
-# Load environment variables
+
 load_dotenv()
 
 # Set up logging
@@ -23,20 +23,6 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "6280721521:AAGvEXRn-4tZD28vooWBiDZJuBxS
 app = Client('gplinks_bypass_bot', api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 logger.info(f'Bot initialized with API_ID: {API_ID}')
-
-# Rate limiting
-rate_limit = defaultdict(lambda: {'count': 0, 'last_reset': datetime.now()})
-
-def check_rate_limit(user_id, limit=5, window=60):
-    now = datetime.now()
-    user_data = rate_limit[user_id]
-    
-    if now - user_data['last_reset'] > timedelta(seconds=window):
-        user_data['count'] = 0
-        user_data['last_reset'] = now
-
-    user_data['count'] += 1
-    return user_data['count'] <= limit
 
 @app.on_message(filters.command('start'))
 async def start_command(client, message):
@@ -54,60 +40,37 @@ async def help_command(client, message):
     '''
     await message.reply_text(help_text)
 
-async def fetch_url(url, headers=None):
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=headers) as response:
-            return await response.text(), response.headers
 
 async def gplinks(url: str):
-    """
-    Bypass gplinks.co URL.
-    :param url: str - The URL to be bypassed
-    :return: str - The bypassed URL or an error message
-    """
+    # Create a cloudscraper instance
+    client = cloudscraper.create_scraper(allow_brotli=False)
+
+    # Extract token from the URL
+    token = url.split("/")[-1]
+    domain = "https://gplinks.co/"
+    referer = "https://safaroflink.com/"
+    headers = {"Referer": referer}
+    response = client.get(url, headers=headers, allow_redirects=False)
+    
+    if "Location" in response.headers:
+        vid = response.headers["Location"].split("=")[-1]
+    else:
+        return "Failed to retrieve the video ID."
+
+    data = {
+        "token": token,
+        "vid": vid
+    }   
+    # Sleep for a while to mimic human behavior
+    time.sleep(10)
+    h = {"X-Requested-With": "XMLHttpRequest"}
+    r = client.post(f"{domain}/links/go", data=data, headers=h)
     try:
-        client = cloudscraper.create_scraper(allow_brotli=False)
-        resp = client.get(url, allow_redirects=False)
-        if resp.status_code in [301, 302]:  # If redirected, use the location header
-            url = resp.headers.get("Location")
-        
-        soup = BeautifulSoup(resp.text, 'html.parser')
-        inputs = soup.find(id='go-link').find_all(name='input')
-        data = {input_tag.get('name'): input_tag.get('value') for input_tag in inputs}
-
-        # Respect cooldown
-        await asyncio.sleep(10)
-
-        # Send POST request to bypass URL
-        headers = {'x-requested-with': 'XMLHttpRequest'}
-        async with aiohttp.ClientSession() as session:
-            async with session.post(f"https://gplinks.co/links/go", data=data, headers=headers) as response:
-                json_response = await response.json()
-                bypassed_url = json_response.get('url')
-                return bypassed_url if bypassed_url else "Failed to bypass URL."
+        return r.json()["url"]
     except Exception as e:
-        logger.error(f"Error in gplinks function: {str(e)}")
-        return "An error occurred while bypassing the link."
+        return f"Something went wrong: {e}"
 
-@app.on_message(filters.text & filters.regex(r'https?://gplinks\.co/\S+'))
-async def handle_gplinks_url(client, message):
-    """
-    Handle gplinks.co URLs sent by the user.
-    """
-    if not check_rate_limit(message.from_user.id):
-        await message.reply_text('Rate limit exceeded. Please try again later.')
-        return
-
-    url = message.text.strip()
-    await message.reply_text('Processing your request. Please wait...')
-
-    try:
-        bypassed_url = await gplinks(url)
-        await message.reply_text(f"Here\'s your bypassed URL: {bypassed_url}")
-    except Exception as e:
-        logger.error(f"Error processing URL: {str(e)}")
-        await message.reply_text('An error occurred while processing your request. Please try again later.')
-
-if __name__ == '__main__':
-    app.run()
-
+# Example usage
+url = "https://gplinks.co/073M"
+bypassed_url = gplinks(url)
+print(bypassed_url)
