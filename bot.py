@@ -1,145 +1,152 @@
-import os
-import asyncio
-import logging
-from dotenv import load_dotenv
-import cloudscraper
+import requests
 import time
-from pyrogram import Client, filters
-import aiohttp
+import json
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
-​
-load_dotenv()
-​
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-​
-API_ID = int(os.environ.get("API_ID", 14712540))
-API_HASH = os.environ.get("API_HASH", "e61b996dc037d969a4f8cf6411bb6165")
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "6280721521:AAGvEXRn-4tZD28vooWBiDZJuBxSErn4Xx0")
-​
-app = Client('gplinks_bypass_bot', api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
-​
-logger.info(f'Bot initialized with API_ID: {API_ID}')
-​
-# Store user request counts
-user_requests = {}
-​
-def can_make_request(user_id):
-    """Rate limiting: 5 requests per minute per user"""
-    now = datetime.now()
-    if user_id in user_requests:
-        requests = [t for t in user_requests[user_id] if now - t < timedelta(minutes=1)]
-        user_requests[user_id] = requests
-        return len(requests) < 5
-    return True
-​
-@app.on_message(filters.command('start'))
-async def start_command(client, message):
-    await message.reply_text('Welcome! Send me a gplinks.co URL, and I\'ll bypass it for you. Use /help for more information.')
-​
-@app.on_message(filters.command('help'))
-async def help_command(client, message):
-    help_text = '''
-    This bot bypasses gplinks.co URLs. Here's how to use it:
+from typing import Optional, Dict, Any
+
+class GPLinksError(Exception):
+    """Custom exception for GPLinks bypass errors"""
+    pass
+
+class GPLinksBot:
+    """Bot for bypassing GPLinks URLs"""
     
-    1. Send a gplinks.co URL to the bot.
-    2. The bot will process the URL and send you the bypassed link.
+    def __init__(self):
+        self.session = requests.Session()
+        self.base_headers = {
+            'authority': 'gplinks.co',
+            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'accept-language': 'en-US,en;q=0.9',
+            'referer': 'https://sabkiyojana.com/',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
+        }
     
-    Note: There's a limit of 5 requests per minute per user to prevent abuse.
-    '''
-    await message.reply_text(help_text)
-​
-async def bypass_gplinks(url: str):
-    """Bypass gplinks.co URLs"""
-    try:
-        # Create a cloudscraper instance
-        client = cloudscraper.create_scraper(allow_brotli=False)
-​
-        # Get the initial page
-        domain = "https://gplinks.co/"
-        referer = "https://safaroflink.com/"
-        headers = {"referer": referer}
-        
-        response = await asyncio.get_event_loop().run_in_executor(
-            None, lambda: client.get(url, headers=headers, allow_redirects=False)
-        )
-​
-        if response.status_code != 200:
-            return None
-​
-        # Parse the page content
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Find the countdown div and extract the target URL
-        countdown = soup.find('div', {'class': 'countdown'})
-        if not countdown:
-            return None
-​
-        # Wait for the countdown (simulated)
-        await asyncio.sleep(5)
-​
-        # Make the final request to get the destination URL
-        dest_url = None
+    def _get_csrf_token(self) -> Optional[str]:
+        """Get CSRF token from cookies"""
+        return self.session.cookies.get('csrfToken')
+    
+    def _make_request(self, method: str, url: str, **kwargs) -> requests.Response:
+        """Make HTTP request with error handling"""
         try:
-            data = {
-                'method': 'bypass',
-                'url': url
-            }
-            headers = {
-                "X-Requested-With": "XMLHttpRequest",
-                "referer": url
+            response = self.session.request(method, url, **kwargs)
+            response.raise_for_status()
+            return response
+        except requests.RequestException as e:
+            raise GPLinksError(f"Request failed: {str(e)}")
+    
+    def _visit_referrer(self):
+        """Visit referrer site to set up session"""
+        try:
+            self._make_request('GET', 'https://sabkiyojana.com/', headers=self.base_headers)
+        except GPLinksError as e:
+            print(f"Warning: Failed to visit referrer site: {str(e)}")
+    
+    def bypass(self, url: str) -> Optional[str]:
+        """
+        Attempt to bypass GPLinks URL
+        
+        Args:
+            url: The GPLinks URL to bypass
+            
+        Returns:
+            str: The bypassed URL if successful, None otherwise
+            
+        Raises:
+            GPLinksError: If an error occurs during bypass attempt
+        """
+        try:
+            print("Starting bypass process...")
+            
+            # Visit referrer first
+            self._visit_referrer()
+            
+            # Get the initial page
+            print("Getting initial page...")
+            response = self._make_request('GET', url, headers=self.base_headers)
+            
+            # Parse the page
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Get form data if available
+            form = soup.find('form', {'id': 'go-link'})
+            form_data = {}
+            if form:
+                print("Found go-link form")
+                for input_tag in form.find_all('input'):
+                    if input_tag.get('name'):
+                        form_data[input_tag['name']] = input_tag.get('value', '')
+            
+            # Extract alias from URL
+            alias = url.split('/')[-1]
+            print(f"Using alias: {alias}")
+            
+            # Get CSRF token
+            csrf_token = self._get_csrf_token()
+            if csrf_token:
+                print("Found CSRF token")
+            
+            # Wait for timer
+            print("Waiting for timer...")
+            time.sleep(15)
+            
+            # Prepare headers for bypass request
+            bypass_headers = {
+                **self.base_headers,
+                'accept': 'application/json, text/javascript, */*; q=0.01',
+                'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                'origin': 'https://gplinks.co',
+                'referer': url,
+                'x-requested-with': 'XMLHttpRequest'
             }
             
-            bypass_response = await asyncio.get_event_loop().run_in_executor(
-                None, 
-                lambda: client.post(f"{domain}links/bypass", data=data, headers=headers)
-            )
+            if csrf_token:
+                bypass_headers['x-csrf-token'] = csrf_token
             
-            if bypass_response.status_code == 200:
-                dest_url = bypass_response.json().get('url')
-        except Exception as e:
-            logger.error(f"Error in final bypass request: {e}")
+            # Make bypass request
+            print("Making bypass request...")
+            bypass_url = "https://gplinks.co/links/go"
+            bypass_data = {
+                'alias': alias,
+                '_csrfToken': csrf_token if csrf_token else '',
+                **form_data
+            }
+            
+            bypass_response = self._make_request('POST', bypass_url, headers=bypass_headers, data=bypass_data)
+            
+            try:
+                json_response = bypass_response.json()
+                
+                # Check for CAPTCHA requirement
+                if json_response.get('status') == 'error' and 'captcha' in json_response.get('message', '').lower():
+                    print("CAPTCHA verification required")
+                    return None
+                
+                # Check for successful bypass
+                if 'url' in json_response and json_response['url'].startswith('http'):
+                    print("Successfully retrieved destination URL")
+                    return json_response['url']
+                
+            except json.JSONDecodeError:
+                print("Failed to parse bypass response")
+            
             return None
-​
-        return dest_url
-​
-    except Exception as e:
-        logger.error(f"Error bypassing URL: {e}")
-        return None
-​
-@app.on_message(filters.regex(r'https?://gplinks\.co/\S+'))
-async def handle_url(client, message):
-    user_id = message.from_user.id
-    
-    # Check rate limit
-    if not can_make_request(user_id):
-        await message.reply_text("You've reached the request limit. Please wait a minute before trying again.")
-        return
-​
-    # Update request count
-    if user_id not in user_requests:
-        user_requests[user_id] = []
-    user_requests[user_id].append(datetime.now())
-​
-    # Send initial processing message
-    status_message = await message.reply_text("Processing your URL... Please wait.")
-​
-    # Extract URL from message
-    url = message.text.strip()
-    
-    # Try to bypass the URL
-    bypassed_url = await bypass_gplinks(url)
-    
-    if bypassed_url:
-        await status_message.edit_text(f"Here's your bypassed URL:\n{bypassed_url}")
-    else:
-        await status_message.edit_text("Sorry, I couldn't bypass this URL. Please make sure it's a valid gplinks.co URL.")
-​
+            
+        except GPLinksError as e:
+            print(f"Error during bypass: {str(e)}")
+            return None
+        except Exception as e:
+            print(f"Unexpected error: {str(e)}")
+            return None
+
 def main():
-    logger.info("Starting bot...")
-    app.run()
-​
+    """Main function for testing"""
+    bot = GPLinksBot()
+    test_url = "https://gplinks.co/MuJ3H"
+    result = bot.bypass(test_url)
+    if result:
+        print(f"Bypassed URL: {result}")
+    else:
+        print("Failed to bypass URL")
+
 if __name__ == "__main__":
     main()
